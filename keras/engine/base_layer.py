@@ -77,6 +77,34 @@ keras_api_gauge = tf.__internal__.monitoring.BoolGauge('/tensorflow/api/oss-kera
 keras_premade_model_gauge = tf.__internal__.monitoring.BoolGauge(
     '/tensorflow/api/oss-keras/premade_models', 'premade keras model usage', 'type')
 
+_is_name_scope_on_model_declaration_enabled = False
+
+
+@keras_export(
+    'keras.experimental.apply_name_scope_on_model_declaration', v1=[])
+def _apply_name_scope_on_model_declaration(enable):
+  """Apply `with tf.name_scope(...)` on model declaration.
+
+  ```python
+  tf.keras.experimental.apply_name_scope_on_model_declaration(True)
+
+  inputs = input_layer.Input((3,))
+  with tf.name_scope('MyScope'):
+    outputs = layers.Dense(10, name='MyDense')(inputs)
+  model = tf.keras.Model(inputs, outputs)
+
+  # with `tf.keras.experimental.apply_name_scope_on_model_declaration(True)`,
+  # The name of the dense layer is "model/MyScope/MyDense/*", and without,
+  # "model/MyDense/*"
+  ```
+
+  Args:
+    enable: Enables if `True`, disables if `False`.
+  """
+  assert isinstance(enable, bool)
+  global _is_name_scope_on_model_declaration_enabled
+  _is_name_scope_on_model_declaration_enabled = enable
+
 
 @keras_export('keras.layers.Layer')
 class Layer(tf.Module, version_utils.LayerVersionSelector):
@@ -427,6 +455,10 @@ class Layer(tf.Module, version_utils.LayerVersionSelector):
     # / loading configs. E.g. they may un-nest an arg that is
     # a list with one element.
     self._preserve_input_structure_in_config = False
+
+    # Save outer name scope at layer declaration so that it is preserved at
+    # the actual layer construction.
+    self._outer_name_scope = tf.get_current_name_scope()
 
   @tf.__internal__.tracking.no_automatic_dependency_tracking
   @generic_utils.default
@@ -2393,6 +2425,8 @@ class Layer(tf.Module, version_utils.LayerVersionSelector):
     if not tf.__internal__.tf2.enabled():
       return self.name
     name_scope = self.name
+    if _is_name_scope_on_model_declaration_enabled and self._outer_name_scope:
+      name_scope = self._outer_name_scope + '/' + name_scope
     current_name_scope = tf.__internal__.get_name_scope()
     if current_name_scope:
       name_scope = current_name_scope + '/' + name_scope

@@ -24,4 +24,8 @@ tf_module {
     name: "WideDeepModel"
     mtype: "<type \'type\'>"
   }
+  member_method {
+    name: "apply_name_scope_on_model_declaration"
+    argspec: "args=[\'enable\'], varargs=None, keywords=None, defaults=None"
+  }
 }
